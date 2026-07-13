@@ -1,165 +1,84 @@
 # FinScope AI — Intelligent Personal Finance Analytics Platform
 
-> A production-grade fintech analytics platform: ML-powered spending intelligence, forecasting, fraud detection, and a natural-language financial assistant — all served through a real API and React dashboard.
+> A production-grade fintech analytics platform: ML-powered spending intelligence, forecasting, fraud detection, and a natural-language financial assistant — all served via a Serverless Python API and React dashboard.
 
-[![CI](https://github.com/your-org/finscope-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/finscope-ai/actions)
+[![CI](https://github.com/DEEPA-356/FinScope-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/DEEPA-356/FinScope-AI/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## Architecture Overview
+## Serverless Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        FinScope AI Platform                         │
-│                                                                     │
-│  ┌──────────────┐     ┌──────────────────┐     ┌────────────────┐  │
-│  │   React 18   │────▶│  FastAPI Backend │────▶│  PostgreSQL    │  │
-│  │  TypeScript  │     │   (Port 8000)    │     │  (Port 5432)   │  │
-│  │  Vite + TW   │     │                  │     └────────────────┘  │
-│  │  (Port 5173) │     │  ┌────────────┐  │     ┌────────────────┐  │
-│  └──────────────┘     │  │   Celery   │  │────▶│     Redis      │  │
-│                        │  │  Workers   │  │     │  (Port 6379)   │  │
-│  ┌──────────────┐     │  └────────────┘  │     └────────────────┘  │
-│  │  ML Pipeline │────▶│                  │     ┌────────────────┐  │
-│  │  (Airflow /  │     │  ┌────────────┐  │────▶│    MLflow      │  │
-│  │   Prefect)   │     │  │   MLflow   │  │     │  (Port 5000)   │  │
-│  └──────────────┘     │  │  Registry  │  │     └────────────────┘  │
-│                        │  └────────────┘  │                         │
-│                        └──────────────────┘                         │
-└─────────────────────────────────────────────────────────────────────┘
+This project uses a 100% free-tier serverless architecture with no credit cards required.
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        FinScope AI Platform                            │
+│                                                                        │
+│  ┌─────────────────┐       ┌────────────────────┐      ┌────────────┐  │
+│  │     Vercel      │       │       Vercel       │      │  Supabase  │  │
+│  │ Static Hosting  │──────▶│ Serverless Python  │─────▶│ PostgreSQL │  │
+│  │ (React/Vite UI) │       │ (FastAPI /api/*)   │      │ (Port 6543)│  │
+│  └─────────────────┘       └────────────────────┘      └────────────┘  │
+│                                      ▲                                 │
+│                                      │                                 │
+│                            ┌────────────────────┐                      │
+│                            │   GitHub Actions   │                      │
+│                            │ (Nightly ML Cron)  │                      │
+│                            └────────────────────┘                      │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| **API** | Python 3.11, FastAPI, Uvicorn |
-| **Database** | PostgreSQL 15, SQLAlchemy 2.0, Alembic |
-| **Cache / Queue** | Redis 7, Celery 5, Flower |
-| **ML** | Pandas, Scikit-learn, XGBoost, LightGBM, Prophet, SHAP |
-| **Experiment Tracking** | MLflow |
-| **Data Validation** | Great Expectations |
+| **API** | Python 3.11, FastAPI, Vercel Serverless |
+| **Database** | PostgreSQL 15 (Supabase), SQLAlchemy 2.0, Alembic |
+| **Cron Jobs** | GitHub Actions (Paginated REST calls) |
+| **ML** | Pandas, Scikit-learn, XGBoost, Prophet, SHAP |
 | **Frontend** | React 18, TypeScript, Vite, TailwindCSS, shadcn/ui |
-| **Auth** | JWT (access + refresh), OAuth2 password flow, RBAC |
-| **Observability** | Prometheus, Grafana, Sentry |
-| **CI/CD** | GitHub Actions → Render/Railway (API) + Vercel (UI) |
+| **Auth** | JWT (access + refresh), OAuth2 password flow |
+| **Hosting** | Vercel (Single Project for Frontend + Backend API) |
+
+## Known Trade-offs
+
+### Vercel Serverless Constraints
+1. **Cold Starts:** The very first API request after a period of inactivity may take a few seconds longer as the Vercel Python runtime spins up.
+2. **AI Chat Streaming:** Vercel's free tier caps execution time to ~10s and does not support persistent WebSockets for serverless functions. The AI Assistant chat endpoint (`/api/v1/chat/message`) has been implemented as a standard synchronous POST request. The frontend displays a loading state until the full response is generated and returned.
 
 ## Quickstart (Local Dev)
 
+While the app is deployed serverless, we maintain legacy Docker files in the `local-dev/` folder if you prefer running it locally via containers.
+
 ### Prerequisites
+- Node.js ≥ 20 (for frontend dev)
+- Python 3.11 (for backend dev)
+- Supabase account (for database)
 
-- Docker Desktop ≥ 24
-- Node.js ≥ 20 (for frontend dev without Docker)
-- Python 3.11 (for backend dev without Docker)
-- `make` (optional, for Makefile shortcuts)
-
-### 1. Clone & configure
+### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/your-org/finscope-ai.git
-cd finscope-ai
-cp .env.example .env
-# Edit .env with your secrets (see .env.example for all required vars)
+git clone https://github.com/DEEPA-356/FinScope-AI.git
+cd FinScope-AI
 ```
 
-### 2. Start all services
-
-```bash
-docker compose up --build
+Create a `.env` file in the `backend/` directory using your Supabase pooled connection string:
+```env
+DATABASE_URL=postgres://[user]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
 ```
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:8000 |
-| API Docs (Swagger) | http://localhost:8000/docs |
-| API Docs (ReDoc) | http://localhost:8000/redoc |
-| Flower (Celery UI) | http://localhost:5555 |
-| MLflow UI | http://localhost:5000 |
-| Grafana | http://localhost:3000 |
-| Prometheus | http://localhost:9090 |
-
-### 3. Run database migrations
-
-```bash
-docker compose exec backend alembic upgrade head
-```
-
-### 4. Seed sample data
-
-```bash
-docker compose exec backend python -m app.db.seed
-```
-
-## Project Structure
-
-```
-finscope-ai/
-├── backend/                  # FastAPI application
-│   ├── app/
-│   │   ├── api/              # Route handlers (auth, transactions, ml, ...)
-│   │   ├── core/             # Config, security, logging
-│   │   ├── db/               # SQLAlchemy models, session, seed
-│   │   ├── schemas/          # Pydantic schemas
-│   │   ├── services/         # Business logic
-│   │   ├── ml/               # Model training & inference
-│   │   ├── tasks/            # Celery task definitions
-│   │   └── main.py
-│   ├── tests/
-│   ├── alembic/
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/                 # React + TypeScript app
-│   ├── src/
-│   │   ├── pages/
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── api/
-│   │   └── App.tsx
-│   ├── package.json
-│   └── Dockerfile
-├── ml-pipeline/              # R&D notebooks + production DAGs
-│   ├── notebooks/
-│   ├── pipelines/
-│   └── mlruns/
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── external/
-├── infra/
-│   ├── docker-compose.yml    # (symlinked to root)
-│   ├── prometheus/
-│   ├── grafana/
-│   └── k8s/
-├── docs/
-│   ├── architecture-diagram.md
-│   ├── er-diagram.md
-│   ├── api-reference.md
-│   └── runbook.md
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── docker-compose.yml
-├── .env.example
-├── .pre-commit-config.yaml
-├── Makefile
-└── LICENSE
-```
-
-## Development
-
-### Backend (without Docker)
+### 2. Run Backend (FastAPI)
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt -r requirements-dev.txt
+source .venv/bin/activate
+pip install -r ../requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend (without Docker)
+### 3. Run Frontend (React)
 
 ```bash
 cd frontend
@@ -167,47 +86,8 @@ npm install
 npm run dev
 ```
 
-### Running tests
-
-```bash
-# Backend
-cd backend && pytest --cov=app --cov-report=term-missing
-
-# Frontend
-cd frontend && npm test
-```
-
-### Pre-commit hooks
-
-```bash
-pip install pre-commit
-pre-commit install
-pre-commit run --all-files   # manual run
-```
-
-## Build Phases
-
-| Phase | Description | Status |
-|---|---|---|
-| 0 | Project scaffolding | ✅ Complete |
-| 1 | Database design (ER + SQLAlchemy + Alembic) | 🔜 Next |
-| 2 | Data ingestion & cleaning pipeline | — |
-| 3 | Feature engineering pipeline | — |
-| 4 | Auth & core API | — |
-| 5 | ML services | — |
-| 6 | Explainability & recommendations API | — |
-| 7 | Fraud/anomaly detection + alerting | — |
-| 8 | Frontend application | — |
-| 9 | FinScope Assistant (RAG chatbot) | — |
-| 10 | BI layer & executive reporting | — |
-| 11 | Testing & observability | — |
-| 12 | CI/CD & deployment | — |
-| 13 | Documentation & portfolio packaging | — |
-
-## Contributing
-
-See [docs/runbook.md](docs/runbook.md) for the development workflow and branching strategy.
+For full deployment instructions, please see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## License
 
-[MIT](LICENSE) — © 2025 FinScope AI
+[MIT](LICENSE) — © 2026 FinScope AI
