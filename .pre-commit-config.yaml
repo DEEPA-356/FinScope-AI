@@ -1,0 +1,61 @@
+repos:
+  # ── Python linting & formatting ─────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff                      # linter (replaces flake8 + isort)
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format               # formatter (replaces black)
+
+  # ── Python type checking ─────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^backend/
+        args: [--ignore-missing-imports, --strict]
+        additional_dependencies:
+          - pydantic>=2.0
+          - sqlalchemy>=2.0
+          - types-redis
+          - types-passlib
+
+  # ── General file quality ─────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=5000]
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, production]
+
+  # ── Docker / docker-compose ──────────────────────────────────────────────
+  - repo: https://github.com/IamTheFij/docker-pre-commit
+    rev: v3.0.1
+    hooks:
+      - id: docker-compose-check
+
+  # ── Secrets detection ────────────────────────────────────────────────────
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: .*/tests/.*|.env.example
+
+  # ── Frontend (ESLint) — runs only on JS/TS changes ───────────────────────
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint (frontend)
+        language: node
+        entry: bash -c 'cd frontend && npx eslint --max-warnings 0 "src/**/*.{ts,tsx}"'
+        files: ^frontend/src/.*\.(ts|tsx)$
+        pass_filenames: false

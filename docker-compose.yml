@@ -1,0 +1,269 @@
+# =============================================================================
+# FinScope AI — Docker Compose (local development)
+# Services: postgres, redis, backend (FastAPI), frontend (Vite),
+#           celery-worker, celery-beat, flower, mlflow, prometheus, grafana
+# =============================================================================
+
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# Shared environment loaded by all Python services
+# ---------------------------------------------------------------------------
+x-backend-env: &backend-env
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+    REDIS_URL: redis://redis:${REDIS_PORT}/${REDIS_DB}
+    CELERY_BROKER_URL: redis://redis:${REDIS_PORT}/0
+    CELERY_RESULT_BACKEND: redis://redis:${REDIS_PORT}/1
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+
+networks:
+  finscope-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  mlflow-data:
+  prometheus-data:
+  grafana-data:
+  upload-data:
+
+services:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Infrastructure
+  # ──────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: finscope-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-finscope}
+      POSTGRES_USER: ${POSTGRES_USER:-finscope_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finscope_user} -d ${POSTGRES_DB:-finscope}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finscope-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: finscope-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finscope-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Backend — FastAPI
+  # ──────────────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: finscope-backend
+    restart: unless-stopped
+    <<: *backend-env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - upload-data:/app/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      uvicorn app.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --log-level info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - finscope-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Celery — Background Workers
+  # ──────────────────────────────────────────────────────────────────────────
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: finscope-celery-worker
+    restart: unless-stopped
+    <<: *backend-env
+    volumes:
+      - ./backend:/app
+      - upload-data:/app/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.tasks.celery_app worker
+        --loglevel=info
+        --concurrency=4
+        --queues=default,ingestion,ml,notifications
+    networks:
+      - finscope-net
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: finscope-celery-beat
+    restart: unless-stopped
+    <<: *backend-env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.tasks.celery_app beat
+        --loglevel=info
+        --scheduler=redbeat.RedBeatScheduler
+    networks:
+      - finscope-net
+
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: finscope-flower
+    restart: unless-stopped
+    <<: *backend-env
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    command: >
+      celery -A app.tasks.celery_app flower
+        --port=5555
+        --broker=redis://redis:6379/0
+    networks:
+      - finscope-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Frontend — React + Vite
+  # ──────────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: finscope-frontend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_APP_ENV: development
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules          # anonymous volume so host node_modules don't shadow
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0
+    networks:
+      - finscope-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # MLflow — Experiment Tracking
+  # ──────────────────────────────────────────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    container_name: finscope-mlflow
+    restart: unless-stopped
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER:-finscope_user}:${POSTGRES_PASSWORD:-dev_password}@postgres:5432/${POSTGRES_DB:-finscope}
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri postgresql://${POSTGRES_USER:-finscope_user}:${POSTGRES_PASSWORD:-dev_password}@postgres:5432/${POSTGRES_DB:-finscope}
+        --default-artifact-root /mlflow/artifacts
+    networks:
+      - finscope-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Observability
+  # ──────────────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: finscope-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    networks:
+      - finscope-net
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: finscope-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - finscope-net

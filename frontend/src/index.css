@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Custom Properties (design tokens) ──────────────────────────────── */
+:root {
+  --radius: 0.625rem;
+  --sidebar-width: 260px;
+  --header-height: 64px;
+
+  /* Chart palette */
+  --chart-1: 99 102 241;   /* brand-500 */
+  --chart-2: 16 185 129;   /* success */
+  --chart-3: 245 158 11;   /* warning */
+  --chart-4: 239 68 68;    /* danger */
+  --chart-5: 139 92 246;   /* violet */
+  --chart-6: 20 184 166;   /* teal */
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @apply bg-gray-950 text-gray-50;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* ── Scrollbar styling ─────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-gray-900;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-700 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-600;
+}
+
+/* ── Glassmorphism utility ─────────────────────────────────────────────── */
+@layer utilities {
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+
+  .glass-hover {
+    @apply transition-all duration-200 hover:bg-white/10 hover:border-white/20;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-gradient-to-r from-brand-400 to-violet-400 bg-clip-text text-transparent;
+  }
+
+  /* Shimmer skeleton loading */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      theme('colors.gray.800') 25%,
+      theme('colors.gray.700') 50%,
+      theme('colors.gray.800') 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Card base */
+  .card {
+    @apply glass rounded-xl p-6;
+  }
+
+  /* Glow accent */
+  .glow-brand {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+  }
+}

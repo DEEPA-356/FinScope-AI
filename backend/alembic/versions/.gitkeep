@@ -1,0 +1,4 @@
+# Alembic migrations directory
+# Migration files are generated with: alembic revision --autogenerate -m "message"
+# Applied with: alembic upgrade head
+# Rolled back with: alembic downgrade -1
