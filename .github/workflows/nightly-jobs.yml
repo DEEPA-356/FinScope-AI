@@ -1,0 +1,42 @@
+name: Nightly ML Jobs
+
+on:
+  schedule:
+    # Run at 02:00 UTC every day
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    # Allows manual triggering from the GitHub Actions tab
+
+jobs:
+  run-nightly-jobs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger paginated serverless jobs
+        env:
+          VERCEL_BACKEND_URL: ${{ secrets.VERCEL_BACKEND_URL }}
+          INTERNAL_JOB_SECRET: ${{ secrets.INTERNAL_JOB_SECRET }}
+        run: |
+          OFFSET=0
+          LIMIT=5
+          HAS_MORE=true
+          
+          while [ "$HAS_MORE" = true ]; do
+            echo "Triggering chunk at offset $OFFSET..."
+            RESPONSE=$(curl -s -X POST "$VERCEL_BACKEND_URL/api/v1/internal/run-nightly-jobs?offset=$OFFSET&limit=$LIMIT" \
+              -H "X-Internal-Token: $INTERNAL_JOB_SECRET" \
+              -H "Content-Type: application/json")
+            
+            echo "Response: $RESPONSE"
+            
+            # Use jq to extract the has_more flag and next_offset from the JSON response
+            HAS_MORE=$(echo "$RESPONSE" | jq -r '.has_more')
+            OFFSET=$(echo "$RESPONSE" | jq -r '.next_offset')
+            
+            if [ "$HAS_MORE" != "true" ]; then
+              echo "Finished processing all users."
+              break
+            fi
+            
+            # Sleep a bit to avoid hammering the Vercel serverless functions / Supabase connections too hard
+            sleep 2
+          done

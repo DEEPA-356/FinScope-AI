@@ -140,5 +140,9 @@ def _register_routers(app: FastAPI) -> None:
     # RAG Chatbot (Phase 9)
     app.include_router(chat.router)
 
+    # Internal Jobs (Serverless chron jobs)
+    from app.api import jobs
+    app.include_router(jobs.router)
+
 
 app = create_app()

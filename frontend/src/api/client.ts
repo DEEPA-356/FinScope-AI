@@ -5,7 +5,9 @@
 
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+// Default to empty string so requests are relative (e.g., /api/v1/...)
+// This is required for Vercel where frontend and backend share the same domain.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
 // ── Axios instance ─────────────────────────────────────────────────────────
 
