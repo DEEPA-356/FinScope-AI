@@ -22,6 +22,7 @@ flower==2.0.1
 
 # ── Auth / Security ────────────────────────────────────────────────────────
 passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
 python-jose[cryptography]==3.3.0
 pydantic[email]==2.7.1
 pydantic-settings==2.3.1
