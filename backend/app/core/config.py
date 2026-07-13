@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(..., min_length=32)
 
     # ── Database ─────────────────────────────────────────────────────────────
+    # ── Database ─────────────────────────────────────────────────────────────
+    # If DATABASE_URL is provided directly (e.g. by Supabase/Vercel), it takes precedence.
+    RAW_DATABASE_URL: str | None = Field(default=None, alias="DATABASE_URL")
+    RAW_DATABASE_URL_SYNC: str | None = Field(default=None, alias="DATABASE_URL_SYNC")
+
     POSTGRES_HOST: str = "postgres"
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "finscope"
@@ -42,6 +47,13 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:  # noqa: N802
         """Async SQLAlchemy connection string."""
+        if self.RAW_DATABASE_URL:
+            # SQLAlchemy asyncpg requires postgresql+asyncpg://
+            if self.RAW_DATABASE_URL.startswith("postgres://"):
+                return self.RAW_DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+            if self.RAW_DATABASE_URL.startswith("postgresql://"):
+                return self.RAW_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return self.RAW_DATABASE_URL
         return (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -50,6 +62,19 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL_SYNC(self) -> str:  # noqa: N802
         """Sync connection string for Alembic migrations."""
+        if self.RAW_DATABASE_URL_SYNC:
+            if self.RAW_DATABASE_URL_SYNC.startswith("postgres://"):
+                return self.RAW_DATABASE_URL_SYNC.replace("postgres://", "postgresql+psycopg2://", 1)
+            if self.RAW_DATABASE_URL_SYNC.startswith("postgresql://"):
+                return self.RAW_DATABASE_URL_SYNC.replace("postgresql://", "postgresql+psycopg2://", 1)
+            return self.RAW_DATABASE_URL_SYNC
+        
+        # Fallback: if they provided async RAW_DATABASE_URL, derive sync URL
+        if self.RAW_DATABASE_URL:
+            base = self.RAW_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+            base = base.replace("postgres://", "postgresql://")
+            return base.replace("postgresql://", "postgresql+psycopg2://", 1)
+
         return (
             f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"

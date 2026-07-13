@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
+from sqlalchemy.pool import NullPool
 
 # ---------------------------------------------------------------------------
 # Async engine — used by the FastAPI app
@@ -23,10 +24,7 @@ from app.core.config import settings
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,          # log SQL in dev
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,           # verify connections before use
-    pool_recycle=3600,            # recycle connections every hour
+    poolclass=NullPool,           # Serverless-friendly: rely on PgBouncer, don't hold connections open
 )
 
 AsyncSessionLocal = async_sessionmaker(
